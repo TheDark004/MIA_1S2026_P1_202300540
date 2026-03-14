@@ -12,6 +12,8 @@ g++ -std=c++17 \
     src/UserSession/UserSession.cpp \
     src/FileOperations/FileOperations.cpp \
     src/Utilities/Utilities.cpp \
+    src/Reports/Reports.h  \
+    src/Reports/Reports.cpp  \
     -lpthread \
     -o ExtreamFS
 

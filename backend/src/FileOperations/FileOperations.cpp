@@ -4,6 +4,7 @@
 #include "../Utilities/Utilities.h"
 #include "../Structs/Structs.h"
 #include <sstream>
+#include <fstream>
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
@@ -20,7 +21,7 @@ std::vector<std::string> SplitPath(const std::string& path) {
     std::vector<std::string> parts;
     std::istringstream ss(path);
     std::string token;
-
+ 
     while (std::getline(ss, token, '/')) {
         if (!token.empty()) {
             parts.push_back(token);
@@ -36,23 +37,23 @@ std::vector<std::string> SplitPath(const std::string& path) {
 
 int FindInDir(std::fstream& file, const SuperBloque& sb,
               int dirInodeNum, const std::string& name) {
-
+ 
     Inode dirInode{};
     FileSystem::ReadInode(file, sb, dirInodeNum, dirInode);
-
+ 
     // Recorrer los 12 bloques directos del inodo
     for (int i = 0; i < 12; i++) {
         if (dirInode.i_block[i] == -1) break;
-
+ 
         // Leer el FolderBlock
         FolderBlock fb{};
         int pos = sb.s_block_start + dirInode.i_block[i] * sizeof(FolderBlock);
         Utilities::ReadObject(file, fb, pos);
-
+ 
         // Revisar las 4 entradas del bloque
         for (int j = 0; j < 4; j++) {
             if (fb.b_content[j].b_inodo == -1) continue;
-
+ 
             std::string entryName(fb.b_content[j].b_name);
             if (entryName == name) {
                 return fb.b_content[j].b_inodo;
@@ -61,7 +62,6 @@ int FindInDir(std::fstream& file, const SuperBloque& sb,
     }
     return -1; // no encontrado
 }
-
 
 // AddEntryToDir — Agrega una entrada a un directorio
 // Pasos:
@@ -403,9 +403,53 @@ std::string Mkfile(const std::string& path, bool random,
     // Verificar que el directorio padre existe
     int parentInode = TraverseToParent(file, sb, parts);
     if (parentInode == -1) {
-        out << "Error: El directorio padre no existe\n";
-        out << "Usa MKDIR -p para crear los directorios intermedios\n";
-        file.close(); return out.str();
+        if (random && size == 0) {
+            // crear carpetas padres automáticamente
+            std::vector<std::string> parentParts(parts.begin(), parts.end() - 1);
+            int currentInode = 0;
+            for (int i = 0; i < (int)parentParts.size(); i++) {
+                int existsInode = FindInDir(file, sb, currentInode, parentParts[i]);
+                if (existsInode != -1) { currentInode = existsInode; continue; }
+                int newInodeNum = FileSystem::AllocateInode(file, sb);
+                int newBlockNum = FileSystem::AllocateBlock(file, sb);
+                if (newInodeNum == -1 || newBlockNum == -1) {
+                    out << "Error: No hay espacio para crear carpetas padres\n";
+                    file.close(); return out.str();
+                }
+                FolderBlock fb{};
+                for (int j = 0; j < 4; j++) {
+                    std::memset(fb.b_content[j].b_name, 0, 12);
+                    fb.b_content[j].b_inodo = -1;
+                }
+                std::memcpy(fb.b_content[0].b_name, ".", 1);
+                fb.b_content[0].b_inodo = newInodeNum;
+                std::memcpy(fb.b_content[1].b_name, "..", 2);
+                fb.b_content[1].b_inodo = currentInode;
+                FileSystem::WriteFolderBlock(file, sb, newBlockNum, fb);
+
+                std::string now = Utilities::GetCurrentDateTime();
+                Inode newInode{};
+                newInode.i_uid = UserSession::currentSession.uid;
+                newInode.i_gid = 1;
+                newInode.i_size = sizeof(FolderBlock);
+                std::memcpy(newInode.i_atime, now.c_str(), 19);
+                std::memcpy(newInode.i_ctime, now.c_str(), 19);
+                std::memcpy(newInode.i_mtime, now.c_str(), 19);
+                for (int j = 0; j < 15; j++) newInode.i_block[j] = -1;
+                newInode.i_block[0] = newBlockNum;
+                newInode.i_type[0]  = '0';
+                std::memcpy(newInode.i_perm, "664", 3);
+                FileSystem::WriteInode(file, sb, newInodeNum, newInode);
+                AddEntryToDir(file, sb, UserSession::currentSession.partStart,
+                              currentInode, parentParts[i], newInodeNum);
+                currentInode = newInodeNum;
+            }
+            parentInode = currentInode;
+        } else {
+            out << "Error: El directorio padre no existe\n";
+            out << "Usa MKDIR -p para crear los directorios intermedios\n";
+            file.close(); return out.str();
+        }
     }
 
     std::string fileName = parts.back();
@@ -416,13 +460,28 @@ std::string Mkfile(const std::string& path, bool random,
         file.close(); return out.str();
     }
 
-    // Preparar el contenido 
-    std::string content = cont;
+    // Validar size negativo
+    if (size < 0) {
+        out << "Error: -size no puede ser negativo\n";
+        file.close(); return out.str();
+    }
 
-    if (random && size > 0) {
-        // Contenido aleatorio: repetir "0123456789\n" hasta 'size' bytes
+    // Preparar el contenido
+    // -cont= puede ser ruta a archivo REAL del sistema Linux o contenido directo
+    // -size= genera contenido aleatorio de 'size' bytes
+    std::string content;
+
+    if (!cont.empty()) {
+        std::ifstream realFile(cont);
+        if (realFile.is_open()) {
+            content = std::string((std::istreambuf_iterator<char>(realFile)),
+                                   std::istreambuf_iterator<char>());
+            realFile.close();
+        } else {
+            content = cont;
+        }
+    } else if (size > 0) {
         std::string chars = "abcdefghijklmnopqrstuvwxyz0123456789\n";
-        content = "";
         for (int i = 0; i < size; i++) {
             content += chars[std::rand() % chars.size()];
         }

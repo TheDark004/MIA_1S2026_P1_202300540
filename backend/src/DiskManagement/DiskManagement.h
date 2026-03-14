@@ -12,7 +12,7 @@ struct MountedPartition {
     std::string path;        // Ruta del .mia
     std::string name;        // Nombre de la partición
     std::string id;          // ID asignado: "341A"
-    int         correlative; // Número correlativo de montaje
+    int correlative; // Número correlativo de montaje
 };
 
 // Todas las funciones retornan string para enviarlo al frontend
@@ -29,8 +29,6 @@ std::string Mount(const std::string& path, const std::string& name);
 
 std::string Mounted();
 
-// Función auxiliar para que otros módulos (MKFS) busquen particiones
-// Busca por ID en el arreglo RAM y llena 'outPath' con la ruta del disco
 // Retorna el índice encontrado o -1 si no existe
 int FindMountedById(const std::string& id, std::string& outPath);
 
