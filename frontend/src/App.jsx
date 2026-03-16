@@ -11,7 +11,7 @@ export default function App() {
   // outputText -> lo que muestra el textarea de salida
   // isLoading  -> true mientras espera respuesta del backend
   const [inputText,  setInputText]  = useState("")
-  const [outputText, setOutputText] = useState("// Bienvenido a ExtreamFS\n// Escribe comandos o carga un script .smia\n")
+  const [outputText, setOutputText] = useState("")
   const [isLoading,  setIsLoading]  = useState(false)
 
   // Referencia al input de archivo (para el botón "Cargar Script")
