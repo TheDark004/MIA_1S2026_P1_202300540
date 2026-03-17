@@ -1,41 +1,31 @@
-// Props:
-//   inputText     -> texto del textarea superior (comandos)
-//   outputText    -> texto del textarea inferior (resultados)
-//   isLoading     -> booleano, true mientras el backend procesa
-//   onInputChange -> callback cuando el usuario escribe
-//   onExecute     -> callback del botón "Ejecutar"
-//   onLoadScript  -> callback del botón "Cargar Script"
-//   onClearOutput -> callback del botón "Limpiar"
-
 import { useEffect, useRef } from "react"
 
 export default function Terminal({
   inputText, outputText, isLoading,
-  onInputChange, onExecute, onLoadScript, onClearOutput
+  onInputChange, onExecute, onLoadScript, onClearOutput, onClearInput
 }) {
-
-  // Auto-scroll al final del output cuando llega nuevo contenido
   const outputRef = useRef(null)
+
   useEffect(() => {
     if (outputRef.current) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight
     }
   }, [outputText])
 
-  // Ejecutar con Ctrl+Enter (además del botón)
   const handleKeyDown = (e) => {
-    if (e.ctrlKey && e.key === "Enter") {
-      onExecute()
-    }
+    if (e.ctrlKey && e.key === "Enter") onExecute()
   }
 
   return (
     <div style={styles.container}>
 
-      {/* ── Panel izquierdo: ENTRADA ──────────────────────── */}
+      {/* ── Panel izquierdo: ENTRADA ── */}
       <div style={styles.panel}>
         <div style={styles.panelHeader}>
-          <span style={styles.panelLabel}>Entrada de Comandos</span>
+          <div style={styles.panelTitle}>
+            <span style={styles.dot} />
+            <span style={styles.panelLabel}>Entrada</span>
+          </div>
           <span style={styles.hint}>Ctrl+Enter para ejecutar</span>
         </div>
 
@@ -44,55 +34,47 @@ export default function Terminal({
           value       = {inputText}
           onChange    = {(e) => onInputChange(e.target.value)}
           onKeyDown   = {handleKeyDown}
-          placeholder = {"# Escribe tus comandos aquí\nmkdisk -size=10 -unit=m -fit=ff -path=/home/user/disco.mia\nfdisk -size=5 -unit=m -name=part1 -path=/home/user/disco.mia\nmount -path=/home/user/disco.mia -name=part1\nmkfs -id=401A"}
+          placeholder = {"# Escribe comandos o carga un script .smia\n\nmkdisk -size=50 -unit=M -fit=FF -path=/home/user/Disco1.mia\nfdisk -type=P -unit=M -name=Part1 -size=10 -path=...\nmount -path=... -name=Part1\nmkfs -id=401A\nlogin -user=root -pass=123 -id=401A"}
           spellCheck  = {false}
         />
 
-        {/* Botones de acción */}
         <div style={styles.buttonRow}>
           <button
-            style     = {{
-              ...styles.button,
-              ...styles.btnExecute,
-              opacity: isLoading ? 0.6 : 1,
-            }}
-            onClick   = {onExecute}
-            disabled  = {isLoading}
+            style   = {{ ...styles.btn, ...styles.btnPrimary, opacity: isLoading ? 0.6 : 1 }}
+            onClick = {onExecute}
+            disabled= {isLoading}
           >
-            {isLoading ? "⏳ Ejecutando..." : "▶ Ejecutar"}
+            {isLoading
+              ? <><span style={styles.spinner} /> Ejecutando...</>
+              : <>▶ Ejecutar</>
+            }
           </button>
 
-          <button
-            style   = {{...styles.button, ...styles.btnLoad}}
-            onClick = {onLoadScript}
-          >
-          Cargar Script (.smia) 📂
+          <button style={{ ...styles.btn, ...styles.btnSecondary }} onClick={onLoadScript}>
+            📂 Cargar Script
           </button>
 
-          <button
-            style   = {{...styles.button, ...styles.btnClear}}
-            onClick = {() => onInputChange("")}
-          >
-             Limpiar Entrada
+          <button style={{ ...styles.btn, ...styles.btnGhost }} onClick={onClearInput}>
+            Limpiar
           </button>
         </div>
       </div>
 
-      {/* ── Panel derecho: SALIDA ─────────────────────────── */}
+      {/* ── Panel derecho: SALIDA ── */}
       <div style={styles.panel}>
         <div style={styles.panelHeader}>
-          <span style={styles.panelLabel}>📤 Salida</span>
-          <button
-            style   = {{...styles.button, ...styles.btnSmall}}
-            onClick = {onClearOutput}
-          >
+          <div style={styles.panelTitle}>
+            <span style={{ ...styles.dot, backgroundColor: "#EF4B4C" }} />
+            <span style={styles.panelLabel}>Salida</span>
+          </div>
+          <button style={{ ...styles.btn, ...styles.btnTiny }} onClick={onClearOutput}>
             Limpiar
           </button>
         </div>
 
         <textarea
           ref       = {outputRef}
-          style     = {{...styles.textarea, ...styles.outputArea}}
+          style     = {{ ...styles.textarea, ...styles.outputArea }}
           value     = {outputText}
           readOnly  = {true}
           spellCheck= {false}
@@ -103,13 +85,12 @@ export default function Terminal({
   )
 }
 
-// ── Estilos 
 const styles = {
   container: {
-    display:   "grid",
-    gridTemplateColumns: "1fr 1fr",  // dos columnas iguales
-    gap:       "20px",
-    height:    "calc(100vh - 120px)",
+    display:             "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap:                 "20px",
+    height:              "calc(100vh - 140px)",
   },
   panel: {
     display:       "flex",
@@ -117,72 +98,106 @@ const styles = {
     gap:           "10px",
   },
   panelHeader: {
-    display:        "flex",
-    justifyContent: "space-between",
-    alignItems:     "center",
-    padding:        "8px 12px",
-    backgroundColor:"#161b22",
-    borderRadius:   "6px",
-    border:         "1px solid #30363d",
+    display:         "flex",
+    justifyContent:  "space-between",
+    alignItems:      "center",
+    padding:         "10px 14px",
+    backgroundColor: "rgba(67, 80, 108, 0.6)",
+    backdropFilter:  "blur(8px)",
+    borderRadius:    "8px",
+    border:          "1px solid rgba(61, 97, 155, 0.3)",
+  },
+  panelTitle: {
+    display:    "flex",
+    alignItems: "center",
+    gap:        "8px",
+  },
+  dot: {
+    width:           "8px",
+    height:          "8px",
+    borderRadius:    "50%",
+    backgroundColor: "#3D619B",
+    display:         "inline-block",
   },
   panelLabel: {
-    color:      "#58a6ff",
-    fontWeight: "bold",
-    fontSize:   "0.9rem",
+    color:         "#E9E9EB",
+    fontWeight:    "600",
+    fontSize:      "0.8rem",
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
   },
   hint: {
-    color:    "#8b949e",
-    fontSize: "0.75rem",
+    color:    "rgba(233, 233, 235, 0.3)",
+    fontSize: "0.7rem",
   },
   textarea: {
     flex:            1,
-    backgroundColor: "#0d1117",
-    color:           "#c9d1d9",
-    border:          "1px solid #30363d",
-    borderRadius:    "6px",
-    padding:         "14px",
-    fontFamily:      "'Fira Code', 'Courier New', monospace",
-    fontSize:        "0.85rem",
+    backgroundColor: "rgba(30, 42, 58, 0.8)",
+    color:           "#E9E9EB",
+    border:          "1px solid rgba(61, 97, 155, 0.25)",
+    borderRadius:    "8px",
+    padding:         "16px",
+    fontFamily:      "'IBM Plex Mono', 'Fira Code', monospace",
+    fontSize:        "0.82rem",
     resize:          "none",
     outline:         "none",
-    lineHeight:      "1.6",
+    lineHeight:      "1.7",
+    caretColor:      "#EF4B4C",
   },
   outputArea: {
-    color:           "#7ee787",  // verde para el output (estilo terminal)
-    backgroundColor: "#0a0f14",
+    backgroundColor: "rgba(20, 28, 40, 0.9)",
+    color:           "#7fba9f",
+    border:          "1px solid rgba(61, 97, 155, 0.2)",
   },
   buttonRow: {
     display: "flex",
-    gap:     "10px",
-    flexWrap:"wrap",
+    gap:     "8px",
   },
-  button: {
-    cursor:          "pointer",
-    border:          "none",
-    borderRadius:    "6px",
-    padding:         "8px 16px",
-    fontFamily:      "'Fira Code', monospace",
-    fontSize:        "0.85rem",
-    fontWeight:      "bold",
-    transition:      "opacity 0.2s",
+  btn: {
+    cursor:        "pointer",
+    border:        "none",
+    borderRadius:  "6px",
+    padding:       "8px 16px",
+    fontFamily:    "'IBM Plex Mono', monospace",
+    fontSize:      "0.8rem",
+    fontWeight:    "600",
+    transition:    "all 0.15s",
+    display:       "flex",
+    alignItems:    "center",
+    gap:           "6px",
+    letterSpacing: "0.02em",
   },
-  btnExecute: {
-    backgroundColor: "#238636",
-    color:           "#ffffff",
+  btnPrimary: {
+    backgroundColor: "#EF4B4C",
+    color:           "#fff",
     flex:            1,
+    justifyContent:  "center",
+    boxShadow:       "0 2px 12px rgba(239, 75, 76, 0.3)",
   },
-  btnLoad: {
-    backgroundColor: "#1f6feb",
-    color:           "#ffffff",
+  btnSecondary: {
+    backgroundColor: "rgba(61, 97, 155, 0.4)",
+    color:           "#E9E9EB",
+    border:          "1px solid rgba(61, 97, 155, 0.5)",
   },
-  btnClear: {
-    backgroundColor: "#30363d",
-    color:           "#c9d1d9",
+  btnGhost: {
+    backgroundColor: "rgba(67, 80, 108, 0.4)",
+    color:           "rgba(233, 233, 235, 0.5)",
+    border:          "1px solid rgba(67, 80, 108, 0.5)",
   },
-  btnSmall: {
-    backgroundColor: "#30363d",
-    color:           "#8b949e",
+  btnTiny: {
+    backgroundColor: "transparent",
+    color:           "rgba(233, 233, 235, 0.35)",
+    border:          "1px solid rgba(67, 80, 108, 0.4)",
     padding:         "4px 10px",
-    fontSize:        "0.75rem",
+    fontSize:        "0.7rem",
+  },
+  spinner: {
+    width:           "10px",
+    height:          "10px",
+    border:          "2px solid rgba(255,255,255,0.3)",
+    borderTopColor:  "white",
+    borderRadius:    "50%",
+    display:         "inline-block",
+    animation:       "spin 0.7s linear infinite",
   },
 }

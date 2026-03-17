@@ -11,6 +11,7 @@ export default defineConfig({
     proxy: {
       "/execute": "http://localhost:18080",
       "/health":  "http://localhost:18080",
+      "/reports": "http://localhost:18080",
     }
   }
 })

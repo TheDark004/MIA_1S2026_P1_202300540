@@ -1,40 +1,44 @@
 #include <iostream>
 #include <string>
+#include <fstream>
+#include <filesystem>
+#include <vector>
 
-// crow_all.h es el servidor HTTP que vive en external/
-// Maneja los POST /execute y GET /report del frontend
 #define CROW_MAIN
 #include "../../external/crow_all.h"
-
-// nlohmann/json para parsear y generar JSON
 #include <nlohmann/json.hpp>
-
 #include "Analyzer/Analyzer.h"
 
 using json = nlohmann::json;
 
+// Decodificar URL: %2F -> /, %20 -> espacio, etc.
+static std::string UrlDecode(const std::string& str) {
+    std::string result;
+    for (size_t i = 0; i < str.size(); i++) {
+        if (str[i] == '%' && i + 2 < str.size()) {
+            int val = std::stoi(str.substr(i + 1, 2), nullptr, 16);
+            result += (char)val;
+            i += 2;
+        } else if (str[i] == '+') {
+            result += ' ';
+        } else {
+            result += str[i];
+        }
+    }
+    return result;
+}
+
 int main() {
-    
     std::cout << "   ExtreamFS — Backend C++ + Crow HTTP\n";
     std::cout << "   Puerto : 18080\n";
     std::cout << "========================================\n";
 
-    //  Crear la app de Crow 
-    // Crow es el servidor HTTP. crow::SimpleApp es la clase base.
     crow::SimpleApp app;
 
-    //  Endpoint: POST /execute
-    // El frontend envía: { "commands": "mkdisk -size=3 ..." }
-    // El backend retorna: { "output": "Disco creado..." }
-    // CROW_ROUTE define una ruta. El método .methods() especifica
-    // que solo acepta POST (no GET).
-
+    // POST /execute
     CROW_ROUTE(app, "/execute").methods(crow::HTTPMethod::POST)
     ([](const crow::request& req) {
-        // Parsear el JSON del body del request
         auto body = json::parse(req.body, nullptr, false);
-
-        // Si el JSON es inválido, retornar error
         if (body.is_discarded() || !body.contains("commands")) {
             json err = {{"output", "Error: JSON inválido o falta campo 'commands'"}};
             auto res = crow::response(400, err.dump());
@@ -42,26 +46,16 @@ int main() {
             res.add_header("Access-Control-Allow-Origin", "*");
             return res;
         }
-
-        // Extraer el string de comandos
         std::string commands = body["commands"].get<std::string>();
-
-        // Analizar el script (puede ser uno o varios comandos)
-        std::string output = Analyzer::AnalyzeScript(commands);
-
-        // Construir y retornar la respuesta JSON
+        std::string output   = Analyzer::AnalyzeScript(commands);
         json response = {{"output", output}};
-
-        // Configurar headers para que el frontend React pueda acceder
         auto res = crow::response(200, response.dump());
         res.add_header("Content-Type", "application/json");
-        res.add_header("Access-Control-Allow-Origin", "*"); // CORS para React
+        res.add_header("Access-Control-Allow-Origin", "*");
         return res;
     });
 
-    // Endpoint: OPTIONS /execute 
-    // Los navegadores hacen un "preflight" OPTIONS antes de POST.
-    // Debemos responder 200 con los headers CORS correctos.
+    // OPTIONS /execute — preflight CORS
     CROW_ROUTE(app, "/execute").methods(crow::HTTPMethod::OPTIONS)
     ([]() {
         auto res = crow::response(200);
@@ -71,7 +65,7 @@ int main() {
         return res;
     });
 
-    // GET /health — verificar que el backend corre
+    // GET /health
     CROW_ROUTE(app, "/health")
     ([]() {
         json r = {{"status", "ok"}, {"backend", "ExtreamFS C++"}};
@@ -81,11 +75,56 @@ int main() {
         return res;
     });
 
-    // Iniciar el servidor 
-    // Puerto 18080 para no chocar con otros servicios comunes
+    // GET /reports/<path> — sirve imágenes y reportes
+    CROW_ROUTE(app, "/reports/<path>")
+    ([](const std::string& filepath) {
+        // Decodificar %2F -> / etc.
+        std::string fullPath = UrlDecode(filepath);
+
+        // Si no es ruta absoluta, buscar en ubicaciones comunes
+        if (fullPath.empty() || fullPath[0] != '/') {
+            std::vector<std::string> dirs = {
+                "../../reports/",
+                "../reports/",
+                "./reports/",
+            };
+            for (auto& dir : dirs) {
+                if (std::filesystem::exists(dir + fullPath)) {
+                    fullPath = dir + fullPath;
+                    break;
+                }
+            }
+        }
+
+        if (!std::filesystem::exists(fullPath)) {
+            auto res = crow::response(404, "No encontrado: " + fullPath);
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
+        }
+
+        // Leer archivo
+        std::ifstream imgFile(fullPath, std::ios::binary);
+        std::string imgData((std::istreambuf_iterator<char>(imgFile)),
+                             std::istreambuf_iterator<char>());
+        imgFile.close();
+
+        // Tipo de contenido según extensión
+        std::string ext = fullPath.substr(fullPath.rfind('.') + 1);
+        std::string contentType = "image/png";
+        if      (ext == "jpg" || ext == "jpeg") contentType = "image/jpeg";
+        else if (ext == "txt")                  contentType = "text/plain; charset=utf-8";
+        else if (ext == "pdf")                  contentType = "application/pdf";
+
+        auto res = crow::response(200, imgData);
+        res.add_header("Content-Type", contentType);
+        res.add_header("Access-Control-Allow-Origin", "*");
+        return res;
+    });
+
     std::cout << "Servidor iniciado en http://localhost:18080\n";
     std::cout << "POST http://localhost:18080/execute\n";
-    std::cout << "GET  http://localhost:18080/health\n\n";
+    std::cout << "GET  http://localhost:18080/health\n";
+    std::cout << "GET  http://localhost:18080/reports/<ruta>\n\n";
     app.port(18080).multithreaded().run();
 
     return 0;
